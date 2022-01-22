@@ -1,0 +1,363 @@
+<html>
+
+<head>
+    <script>
+        var ROUND = 13;
+        var SIZE = 2;
+        var INT_NUM = 2 * 4;
+        var MASTER_KEY_SIZE = 2;
+        var RANDOM_SIZE = 16;
+        var MASTER_KEY = [0, 0, 0, 0];
+        var ROUND_KEY = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        var CIPHER_TEXT = [0, 0, 0, 0, 0, 0, 0, 0];
+        var PLAIN_TEXT = [0, 0, 0, 0, 0, 0, 0, 0];
+
+        var img = new Image();
+        var img_size;
+
+        var tmp = [];
+        var RND_KEY;
+
+        function draw() {
+
+            var canvas = document.getElementById("canvas");             //canvas 객체 얻어버림
+            var canvasEdited = document.getElementById('canvasEdited');   //canvasEdited 객체 얻어버림
+            var canvasDEC = document.getElementById('canvasDEC');  //canvasDEC 객체 얻어버림
+            var ctx = canvas.getContext('2d');
+            var ENC_ctx = canvasEdited.getContext('2d');
+
+            img.onload = function () {
+                img_size = 640000;
+                ctx.drawImage(img, 0, 0, 400, 400); //이미지를 그려버려
+
+                var imageData = ctx.getImageData(0, 0, 400, 400); //(0,0)부터 400*400만큼의 이미지 데이터를 가져와
+                ENCPixels(imageData.data); //이미지를 암호화해 
+                drawENCImage(imageData); //출력
+
+                DECPixels(imageData.data);
+                drawDECImage(imageData);
+            };
+
+        }
+
+        function drawENCImage(newData) {
+            var ctxEdited = canvasEdited.getContext('2d');
+            ctxEdited.putImageData(newData, 0, 0);
+        }
+
+        function drawDECImage(newData) {
+            var ctxDEC = canvasDEC.getContext('2d');
+            ctxDEC.putImageData(newData, 0, 0);
+        }
+
+
+        function DECPixels(imgData) {
+            for (var i = 0, r = 0; i < img_size; i += 8, r++) {   //여기 세 개인 이유가 RGB+투명도
+
+                PLAIN_TEXT = DEC(imgData, RND_KEY[r], CIPHER_TEXT, i);
+
+                imgData[i + 0] = PLAIN_TEXT[3];  //투명도
+                imgData[i + 1] = PLAIN_TEXT[2];  //BLUE
+                imgData[i + 2] = PLAIN_TEXT[1];  //GREEN
+                imgData[i + 3] = PLAIN_TEXT[0];  //RED
+
+                imgData[i + 4] = PLAIN_TEXT[7];  //투명도
+                imgData[i + 5] = PLAIN_TEXT[6];  //BLUE
+                imgData[i + 6] = PLAIN_TEXT[5];  //GREEN
+                imgData[i + 7] = PLAIN_TEXT[4];  //RED
+            }
+        }
+
+        function ENCPixels(imgData) {
+            RND_KEY = create2DArray(img_size, 112);
+            //길이가 원래는 160,000(400*400)개인데 각 픽셀별로 4개(RGB+투명도)가 있기 때문에 160,000*4 = 640,000개가 된다.
+
+            for (var i = 0, r = 0; i < img_size; i += 8, r++) {   //여기 세 개인 이유가 RGB+투명도
+
+                PLAIN_GEN(imgData[i + 0], imgData[i + 1], imgData[i + 2], imgData[i + 3],
+                    imgData[i + 4], imgData[i + 5], imgData[i + 6], imgData[i + 7]);
+
+                tmp = ROUND_KEY_GEN();  //라운드키가 있어야 복호화 가능
+
+                for (var j = 0; j < 112; j++) {
+                    RND_KEY[r][j] = tmp[j];
+                }
+                PLAIN_TEXT = ENC(PLAIN_TEXT, RND_KEY[r], CIPHER_TEXT);
+
+                imgData[i + 0] = PLAIN_TEXT[3];  //투명도
+                imgData[i + 1] = PLAIN_TEXT[2];  //BLUE
+                imgData[i + 2] = PLAIN_TEXT[1];  //GREEN
+                imgData[i + 3] = PLAIN_TEXT[0];  //RED
+
+                imgData[i + 4] = PLAIN_TEXT[7];  //투명도
+                imgData[i + 5] = PLAIN_TEXT[6];  //BLUE
+                imgData[i + 6] = PLAIN_TEXT[5];  //GREEN
+                imgData[i + 7] = PLAIN_TEXT[4];  //RED
+            }
+        }
+
+        function create2DArray(rows, columns) { //2차원 배열 생성
+            var arr = new Array(rows);
+            for (var i = 0; i < rows; i++) {
+                arr[i] = new Array(columns);
+            }
+            return arr;
+        }
+
+        function key_add(val, rk, num) {
+            val[0] = val[0] ^ rk[0 + 8 * num];
+            val[1] = val[1] ^ rk[1 + 8 * num];
+            val[2] = val[2] ^ rk[2 + 8 * num];
+            val[3] = val[3] ^ rk[3 + 8 * num];
+            val[4] = val[4] ^ rk[4 + 8 * num];
+            val[5] = val[5] ^ rk[5 + 8 * num];
+            val[6] = val[6] ^ rk[6 + 8 * num];
+            val[7] = val[7] ^ rk[7 + 8 * num];
+        }
+
+        function sbox(X) {
+            T = [0, 0, 0];
+
+
+            X[5] ^= (X[7] & X[6]) & 0xFF;
+            X[4] ^= (X[3] & X[5]) & 0xFF;
+            X[7] ^= X[4] & 0xFF;
+            X[6] ^= X[3] & 0xFF;
+            X[3] ^= (X[4] | X[5]) & 0xFF;
+            X[5] ^= X[7] & 0xFF;
+            X[4] ^= (X[5] & X[6]) & 0xFF;
+
+            X[2] ^= X[1] & X[0] & 0xFF;
+            X[0] ^= X[2] | X[1] & 0xFF;
+            X[1] ^= X[2] | X[0] & 0xFF;
+            X[2] = ~X[2] & 0xFF;
+
+            X[7] ^= X[1] & 0xFF;
+            X[3] ^= X[2] & 0xFF;
+            X[4] ^= X[0] & 0xFF;
+
+            T[0] = X[7] & 0xFF;
+            T[1] = X[3] & 0xFF;
+            T[2] = X[4] & 0xFF;
+            X[6] ^= (T[0] & X[5]) & 0xFF;
+            T[0] ^= X[6] & 0xFF;
+            X[6] ^= (T[2] | T[1]) & 0xFF;
+            T[1] ^= X[5] & 0xFF;
+            X[5] ^= (X[6] | T[2]) & 0xFF;
+            T[2] ^= (T[1] & T[0]) & 0xFF;
+
+            X[2] ^= T[0] & 0xFF;
+            T[0] = X[1] ^ T[2] & 0xFF;
+            X[1] = X[0] ^ T[1] & 0xFF;
+            X[0] = X[7] & 0xFF;
+            X[7] = T[0] & 0xFF;
+            T[1] = X[3] & 0xFF;
+            X[3] = X[6] & 0xFF;
+            X[6] = T[1] & 0xFF;
+            T[2] = X[4] & 0xFF;
+            X[4] = X[5] & 0xFF;
+            X[5] = T[2] & 0xFF;
+        }
+
+        function inv_sbox(X) {
+            T = [0, 0, 0];
+
+            T[0] = X[7] & 0xFF;
+            X[7] = X[0] & 0xFF;
+            X[0] = X[1] & 0xFF;
+            X[1] = T[0] & 0xFF;
+            T[0] = X[7] & 0xFF;
+            T[1] = X[6] & 0xFF;
+            T[2] = X[5] & 0xFF;
+
+            X[4] ^= (X[3] | T[2]) & 0xFF;
+            X[3] ^= (T[2] | T[1]) & 0xFF;
+            T[1] ^= X[4] & 0xFF;
+            T[0] ^= X[3] & 0xFF;
+            T[2] ^= (T[1] & T[0]) & 0xFF;
+            X[3] ^= (X[4] & X[7]) & 0xFF;
+
+            X[0] ^= T[1] & 0xFF;
+            X[1] ^= T[2] & 0xFF;
+            X[2] ^= T[0] & 0xFF;
+            T[0] = X[3] & 0xFF;
+            X[3] = X[6] & 0xFF;
+            X[6] = T[0] & 0xFF;
+            T[0] = X[5] & 0xFF;
+            X[5] = X[4] & 0xFF;
+            X[4] = T[0] & 0xFF;
+
+            X[7] ^= X[1] & 0xFF;
+            X[3] ^= X[2] & 0xFF;
+            X[4] ^= X[0] & 0xFF;
+
+            X[4] ^= (X[5] & X[6]) & 0xFF;
+            X[5] ^= X[7] & 0xFF;
+            X[3] ^= (X[4] | X[5]) & 0xFF;
+            X[6] ^= X[3] & 0xFF;
+            X[7] ^= X[4] & 0xFF;
+            X[4] ^= (X[3] & X[5]) & 0xFF;
+            X[5] ^= (X[7] & X[6]) & 0xFF;
+
+            X[2] = ~X[2] & 0xFF;
+            X[1] ^= X[2] | X[0] & 0xFF;
+            X[0] ^= X[2] | X[1] & 0xFF;
+            X[2] ^= X[1] & X[0] & 0xFF;
+        }
+
+        function pbox(X) {
+            X[1] = ((X[1] << 7) | (X[1] >> 1)) & 0XFF;
+            X[2] = ((X[2] << 4) | (X[2] >> 4)) & 0XFF;
+            X[3] = ((X[3] << 3) | (X[3] >> 5)) & 0XFF;
+            X[4] = ((X[4] << 6) | (X[4] >> 2)) & 0XFF;
+            X[5] = ((X[5] << 5) | (X[5] >> 3)) & 0XFF;
+            X[6] = ((X[6] << 1) | (X[6] >> 7)) & 0XFF;
+            X[7] = ((X[7] << 2) | (X[7] >> 6)) & 0XFF;
+        }
+
+        function inv_pbox(X) {
+            X[1] = ((X[1] << 1) | (X[1] >> 7)) & 0XFF;
+            X[2] = ((X[2] << 4) | (X[2] >> 4)) & 0XFF;
+            X[3] = ((X[3] << 5) | (X[3] >> 3)) & 0XFF;
+            X[4] = ((X[4] << 2) | (X[4] >> 6)) & 0XFF;
+            X[5] = ((X[5] << 3) | (X[5] >> 5)) & 0XFF;
+            X[6] = ((X[6] << 7) | (X[6] >> 1)) & 0XFF;
+            X[7] = ((X[7] << 6) | (X[7] >> 2)) & 0XFF;
+        }
+
+        function rand(min, max) {
+            return Math.floor(Math.random() * (max - min)) + min;
+        }
+
+        function PLAIN_GEN(P1, P2, P3, P4, P5, P6, P7, P8) {    //평문 생성
+            PLAIN_TEXT = [parseInt('0x' + P1.toString(16) + P2.toString(16) + P3.toString(16) + P4.toString(16), 16),
+            parseInt('0x' + P5.toString(16) + P6.toString(16) + P7.toString(16) + P8.toString(16), 16)];
+
+        }
+
+        function ROUND_KEY_GEN() {
+            var RCON = 0;
+
+            for (var i = 0; i < RANDOM_SIZE; i++) {
+                for (var j = 0; j < INT_NUM; j++) {
+                    MASTER_KEY[INT_NUM * i + j] =
+                        rand(0, 255);
+                }
+            }
+
+            for (var i = 0; i < ROUND + 1; i++) {
+                for (var j = 0; j < INT_NUM; j++) {
+                    ROUND_KEY[INT_NUM * i + j] = MASTER_KEY[(INT_NUM * i + j) % (MASTER_KEY_SIZE * INT_NUM)];
+                }
+                ROUND_KEY[INT_NUM * i] ^= RCON;
+                RCON += 1;
+            }
+            return ROUND_KEY;
+        }
+
+        function ENC(PLAIN_TEXT, ROUND_KEY, CIPHER_TEXT) {
+            P = []
+            RK = ROUND_KEY
+
+            //쪼개기 작업
+            P[0] = PLAIN_TEXT[0] & 0XFF;
+            PLAIN_TEXT[0] = PLAIN_TEXT[0] >> 8
+            P[1] = PLAIN_TEXT[0] & 0XFF;
+            PLAIN_TEXT[0] = PLAIN_TEXT[0] >> 8
+            P[2] = PLAIN_TEXT[0] & 0XFF;
+            PLAIN_TEXT[0] = PLAIN_TEXT[0] >> 8
+            P[3] = PLAIN_TEXT[0] & 0XFF;
+
+            P[4] = PLAIN_TEXT[1] & 0XFF;
+            PLAIN_TEXT[1] = PLAIN_TEXT[1] >> 8
+            P[5] = PLAIN_TEXT[1] & 0XFF;
+            PLAIN_TEXT[1] = PLAIN_TEXT[1] >> 8
+            P[6] = PLAIN_TEXT[1] & 0XFF;
+            PLAIN_TEXT[1] = PLAIN_TEXT[1] >> 8
+            P[7] = PLAIN_TEXT[1] & 0XFF;
+
+            key_add(P, RK, 0);
+
+            for (var i = 1; i < ROUND + 1; i++) {
+                sbox(P);
+                pbox(P);
+                key_add(P, RK, i);
+            }
+
+            return P;
+        }
+
+        function DEC(CIPHER_TEXT, ROUND_KEY, PLAIN_TEXT, i) {
+            C = [];
+            RK = [];
+
+            C[0] = CIPHER_TEXT[i + 3];
+            C[1] = CIPHER_TEXT[i + 2];
+            C[2] = CIPHER_TEXT[i + 1];
+            C[3] = CIPHER_TEXT[i + 0];
+
+            C[4] = CIPHER_TEXT[i + 7];
+            C[5] = CIPHER_TEXT[i + 6];
+            C[6] = CIPHER_TEXT[i + 5];
+            C[7] = CIPHER_TEXT[i + 4];
+
+            RK = ROUND_KEY;
+
+            for (var i = ROUND; i > 0; i--) {
+                key_add(C, RK, i);
+                inv_pbox(C);
+                inv_sbox(C);
+            }
+
+            key_add(C, RK, 0);
+
+            return C;
+        }
+
+        //파일 업로드 
+        function openTextFile() {
+            var input = document.createElement("input");
+
+            input.type = "file";
+            input.accept = "image/*";
+            input.id = "uploadInput";
+
+            input.click();
+            input.onchange = function (event) {
+                processFile(event.target.files[0]);
+            };
+        }
+
+        function processFile(file) {
+            var reader = new FileReader();
+
+            reader.onload = function () {
+                var result = reader.result;
+                img.src = result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+    </script>
+
+</head>
+
+<body onload="draw();">
+    <canvas id="canvas" width=400 height=400 style=' border : 1px solid #000 ' ;></canvas>
+    <canvas id="canvasEdited" width=400 height=400 style=' border : 1px solid #000 ' ;></canvas>
+    <canvas id="canvasDEC" width=400 height=400 style=' border : 1px solid #000 ' ;></canvas>
+
+    <br>
+    <br>
+    <button onclick="openTextFile()">Image File Open</button>
+
+
+</body>
+
+</html>
