@@ -9,7 +9,7 @@ def main():
     
 # ==== 128bit ====
     SIZE = 2
-    MASTER_KEY_SIZE = 16
+    #MASTER_KEY_SIZE = 16 # normal_128 코드에 적힌 MASTER_KEY_SIZE 쓰삼
     
 # PLAIN_TEXT
     PLAIN_TEXT = [0, 0]
